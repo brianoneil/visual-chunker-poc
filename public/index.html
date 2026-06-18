@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual Chunker POC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #07091a;
+      --surface: #0d1129;
+      --surface2: #131735;
+      --border: #1e2340;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --accent: #6366f1;
+      --accent-glow: rgba(99,102,241,0.15);
+
+      --title: #f59e0b;
+      --header: #8b5cf6;
+      --paragraph: #94a3b8;
+      --table: #10b981;
+      --figure: #3b82f6;
+      --caption: #ec4899;
+      --list: #14b8a6;
+      --footer: #64748b;
+      --sidebar: #f97316;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--surface);
+    }
+
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+
+    header h1 { font-size: 18px; font-weight: 600; }
+    header p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    .main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    /* Upload area */
+    .upload-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 32px;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 48px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+    }
+
+    .drop-icon { font-size: 40px; margin-bottom: 12px; }
+    .drop-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .drop-sub { font-size: 13px; color: var(--muted); }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .field label { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    select, .filename-display {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    select:focus { border-color: var(--accent); }
+
+    .filename-display {
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .filename-display.has-file { color: var(--text); }
+
+    .btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      border: none;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) { background: #4f46e5; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Progress */
+    .progress-area {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 32px;
+      margin-bottom: 32px;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .progress-area.visible { display: flex; }
+
+    .spinner {
+      width: 24px; height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress-text { font-size: 14px; color: var(--muted); }
+    .progress-text strong { color: var(--text); }
+
+    /* Error */
+    .error-box {
+      display: none;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      color: #fca5a5;
+      font-size: 14px;
+    }
+
+    .error-box.visible { display: block; }
+
+    /* Legend */
+    .legend {
+      display: none;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .legend.visible { display: flex; }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+    }
+
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* Pages grid */
+    .pages-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+      gap: 24px;
+    }
+
+    .page-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .page-card-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .page-num { font-size: 13px; font-weight: 600; }
+    .region-count { font-size: 12px; color: var(--muted); }
+
+    .page-wrapper {
+      position: relative;
+      line-height: 0;
+    }
+
+    .page-wrapper img {
+      width: 100%;
+      display: block;
+    }
+
+    .region-box {
+      position: absolute;
+      border-width: 2px;
+      border-style: solid;
+      pointer-events: none;
+    }
+
+    .region-label {
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 5px;
+      border-radius: 0 0 4px 0;
+      color: white;
+      white-space: nowrap;
+      line-height: 1.4;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+
+    .page-regions {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .region-pill {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 99px;
+      border-width: 1px;
+      border-style: solid;
+      font-weight: 500;
+    }
+
+    .page-error {
+      padding: 16px 18px;
+      font-size: 13px;
+      color: #fca5a5;
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: var(--muted);
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .stats-bar.visible { display: flex; }
+    .stats-bar span strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🔬</div>
+  <div>
+    <h1>Visual Chunker POC</h1>
+    <p>PDF layout detection with semantic region bounding boxes</p>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="upload-card">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".pdf">
+      <div class="drop-icon">📄</div>
+      <div class="drop-title">Drop a PDF here or click to browse</div>
+      <div class="drop-sub">Max 50 MB · Renders pages at 120 DPI</div>
+    </div>
+
+    <div class="controls">
+      <div class="field">
+        <label>Selected File</label>
+        <div class="filename-display" id="filenameDisplay">No file selected</div>
+      </div>
+      <div class="field" style="flex:0;min-width:260px">
+        <label>Vision Model</label>
+        <select id="modelSelect">
+          <option value="google/gemini-flash-1.5">Gemini Flash 1.5 (fast, default)</option>
+          <option value="google/gemini-2.0-flash-exp">Gemini 2.0 Flash (latest)</option>
+          <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5</option>
+          <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+          <option value="qwen/qwen-2-vl-72b-instruct">Qwen 2 VL 72B</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="analyzeBtn" disabled>Analyze PDF</button>
+    </div>
+  </div>
+
+  <div class="progress-area" id="progressArea">
+    <div class="spinner"></div>
+    <div class="progress-text" id="progressText"><strong>Uploading and rendering pages…</strong></div>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="stats-bar" id="statsBar"></div>
+
+  <div class="legend" id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--title)"></div>Title</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--header)"></div>Header</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--paragraph)"></div>Paragraph</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--table)"></div>Table</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--figure)"></div>Figure</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--caption)"></div>Caption</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--list)"></div>List</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--footer)"></div>Footer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--sidebar)"></div>Sidebar</div>
+  </div>
+
+  <div class="pages-grid" id="pagesGrid"></div>
+</div>
+
+<script>
+  const TYPE_COLORS = {
+    title:     '#f59e0b',
+    header:    '#8b5cf6',
+    paragraph: '#94a3b8',
+    table:     '#10b981',
+    figure:    '#3b82f6',
+    caption:   '#ec4899',
+    list:      '#14b8a6',
+    footer:    '#64748b',
+    sidebar:   '#f97316'
+  };
+
+  function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return `${r},${g},${b}`;
+  }
+
+  const fileInput = document.getElementById('fileInput');
+  const dropZone = document.getElementById('dropZone');
+  const filenameDisplay = document.getElementById('filenameDisplay');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const modelSelect = document.getElementById('modelSelect');
+  const progressArea = document.getElementById('progressArea');
+  const progressText = document.getElementById('progressText');
+  const errorBox = document.getElementById('errorBox');
+  const pagesGrid = document.getElementById('pagesGrid');
+  const legend = document.getElementById('legend');
+  const statsBar = document.getElementById('statsBar');
+
+  let selectedFile = null;
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+  });
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file?.type === 'application/pdf') setFile(file);
+  });
+
+  function setFile(file) {
+    selectedFile = file;
+    filenameDisplay.textContent = file.name;
+    filenameDisplay.classList.add('has-file');
+    analyzeBtn.disabled = false;
+  }
+
+  analyzeBtn.addEventListener('click', analyze);
+
+  async function analyze() {
+    if (!selectedFile) return;
+
+    // Reset
+    pagesGrid.innerHTML = '';
+    legend.classList.remove('visible');
+    statsBar.classList.remove('visible');
+    errorBox.classList.remove('visible');
+    progressArea.classList.add('visible');
+    progressText.innerHTML = '<strong>Uploading PDF and rendering pages…</strong>';
+    analyzeBtn.disabled = true;
+
+    try {
+      const formData = new FormData();
+      formData.append('pdf', selectedFile);
+      formData.append('model', modelSelect.value);
+
+      progressText.innerHTML = '<strong>Detecting layout regions…</strong> This may take a moment for multi-page documents.';
+
+      const res = await fetch('/analyze', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+
+      progressArea.classList.remove('visible');
+      renderResults(data);
+    } catch (err) {
+      progressArea.classList.remove('visible');
+      errorBox.textContent = `Error: ${err.message}`;
+      errorBox.classList.add('visible');
+    } finally {
+      analyzeBtn.disabled = false;
+    }
+  }
+
+  function renderResults(data) {
+    const { pages, model } = data;
+    const totalRegions = pages.reduce((sum, p) => sum + (p.regions?.length || 0), 0);
+
+    statsBar.innerHTML = `
+      <span><strong>${pages.length}</strong> page${pages.length !== 1 ? 's' : ''} analyzed</span>
+      <span><strong>${totalRegions}</strong> regions detected</span>
+      <span>Model: <strong>${model}</strong></span>
+    `;
+    statsBar.classList.add('visible');
+    legend.classList.add('visible');
+
+    for (const page of pages) {
+      const card = document.createElement('div');
+      card.className = 'page-card';
+
+      const header = document.createElement('div');
+      header.className = 'page-card-header';
+      header.innerHTML = `
+        <span class="page-num">Page ${page.page}</span>
+        <span class="region-count">${page.error ? '⚠ Error' : `${page.regions.length} regions`}</span>
+      `;
+      card.appendChild(header);
+
+      if (page.error) {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'page-error';
+        errDiv.textContent = page.error;
+        card.appendChild(errDiv);
+      } else if (page.imageBase64) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'page-wrapper';
+
+        const img = document.createElement('img');
+        img.src = `data:image/png;base64,${page.imageBase64}`;
+        img.alt = `Page ${page.page}`;
+        wrapper.appendChild(img);
+
+        // Draw bounding boxes
+        for (const region of page.regions) {
+          const bb = region.bbox;
+          if (!bb) continue;
+          const color = TYPE_COLORS[region.type] || '#ffffff';
+          const rgb = hexToRgb(color);
+
+          const box = document.createElement('div');
+          box.className = 'region-box';
+          box.style.cssText = `
+            left:${bb.x}%; top:${bb.y}%;
+            width:${bb.w}%; height:${bb.h}%;
+            border-color:${color};
+            background:rgba(${rgb},0.08);
+          `;
+
+          const lbl = document.createElement('div');
+          lbl.className = 'region-label';
+          lbl.style.background = color;
+          lbl.textContent = region.label || region.type;
+          box.appendChild(lbl);
+
+          wrapper.appendChild(box);
+        }
+
+        card.appendChild(wrapper);
+
+        // Region pills
+        if (page.regions.length > 0) {
+          const pills = document.createElement('div');
+          pills.className = 'page-regions';
+          for (const region of page.regions) {
+            const color = TYPE_COLORS[region.type] || '#ffffff';
+            const rgb = hexToRgb(color);
+            const pill = document.createElement('div');
+            pill.className = 'region-pill';
+            pill.style.cssText = `color:${color}; border-color:rgba(${rgb},0.4); background:rgba(${rgb},0.08)`;
+            pill.textContent = `${region.type}: ${region.label}`;
+            pills.appendChild(pill);
+          }
+          card.appendChild(pills);
+        }
+      }
+
+      pagesGrid.appendChild(card);
+    }
+  }
+</script>
+
+</body>
+</html>
